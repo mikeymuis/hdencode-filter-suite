@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.3-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.4-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -43,21 +43,47 @@ Want only 2160p Dolby Vision movies with an IMDb rating of 8 or higher and under
 
 ### Requirements
 
-- [Tampermonkey](https://www.tampermonkey.net/) browser extension (Chrome, Firefox, Edge, Safari)
+Requires a userscript manager. The following are supported:
+
+| Manager | Browser |
+|---|---|
+| [Tampermonkey](https://www.tampermonkey.net/) | Chrome, Firefox, Edge, Safari, Opera, Brave |
+| [Violentmonkey](https://violentmonkey.github.io/) | Firefox, Edge, Brave, Opera, Vivaldi |
+| [Greasemonkey](https://www.greasespot.net/) | Firefox |
+| Other Greasemonkey-compatible managers | varies |
+
+Tampermonkey is recommended and the most widely tested. Note that Violentmonkey is currently not supported on Chrome due to a technical limitation — Brave is a good alternative for Chromium users who prefer Violentmonkey.
 
 The script is fully open-source so you can read every line of code before installing.
 
 ### Install
 
-1. Make sure Tampermonkey is installed and enabled in your browser
-2. Click the link below and Tampermonkey will detect it automatically:
+1. Make sure a userscript manager is installed and enabled in your browser
+2. Click the link below and your userscript manager will detect it automatically:
 
    **[Install HDEncode Filter Suite](https://raw.githubusercontent.com/mikeymuis/hdencode-filter-suite/main/hdencode-filter-suite.user.js)**
 
-3. Click **Install** in the Tampermonkey dialog
+3. Click **Install** in the dialog
 4. Navigate to [HDEncode.org](https://hdencode.org) and the filter bar will appear automatically above the release grid
 
-Updates are delivered automatically via Tampermonkey whenever a new version is released.
+Updates are delivered automatically via your userscript manager whenever a new version is released.
+
+#### Tampermonkey
+1. Install the [Tampermonkey](https://www.tampermonkey.net/) extension
+2. Click the install link above
+3. Tampermonkey will detect the script automatically
+4. Click **Install**
+
+#### Violentmonkey
+1. Install the [Violentmonkey](https://violentmonkey.github.io/) extension
+2. Click the install link above
+3. Confirm installation in the dialog
+
+#### Greasemonkey / other managers
+1. Install your preferred userscript manager
+2. Click the install link above
+3. If the manager detects `.user.js` automatically, approve the install
+4. If it does not, create a new script manually and paste in the script contents
 
 ---
 
@@ -104,6 +130,21 @@ Works on all HDEncode pages including category pages, search results and tag pag
 
 ---
 
+## Persistence
+
+Filter settings are saved to your browser's local storage and restored automatically when you return. Nothing is sent anywhere.
+
+What is saved:
+- Dolby Vision, HDR, resolution, content type
+- Minimum IMDb rating, file size limits
+- Release group selection
+- Search text
+
+What is not saved:
+- The page limit dropdown — this always resets to "All pages" on a new visit
+
+---
+
 ## Contributing
 
 Bug reports and suggestions are welcome via [GitHub Issues](https://github.com/mikeymuis/hdencode-filter-suite/issues). I'm not a developer myself, this script was built with AI assistance, so I can't promise a quick turnaround but I read everything and will do my best.
@@ -119,6 +160,11 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.4
+- Added stop button to cancel page loading mid-way
+- Release group dropdown now picks the most common capitalisation when the same group appears with different casing (e.g. ETHEL vs Ethel)
+- Added a subtle hint on pages without a category context, suggesting to search or browse a category first before loading pages
 
 ### v1.3
 - Download link panel now shows hoster names in full (e.g. "rg" → "Rapidgator") with a colored indicator per hoster

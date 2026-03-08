@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.3
+// @version      1.4
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.3';
+    const SCRIPT_VERSION = '1.4';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -83,22 +83,42 @@
 
         const current = select.value;
 
-        const groups = new Set();
+        // Track count and first-seen index per casing variant, keyed by lowercase
+        // so e.g. "ETHEL" and "Ethel" are treated as the same group.
+        // The variant with the highest count wins; ties go to the first one seen.
+        const groupMap = new Map(); // lowercase key → { variants: Map<name, count>, firstSeen: number }
+        let seen = 0;
+
         for (const item of container.querySelectorAll('.fit.item')) {
             if (item.style.display === 'none') continue;
             const g = getGroup(item);
-            if (g) groups.add(g);
+            if (!g) continue;
+
+            const key = g.toLowerCase();
+            if (!groupMap.has(key)) {
+                groupMap.set(key, { variants: new Map(), firstSeen: seen++ });
+            }
+            const entry = groupMap.get(key);
+            entry.variants.set(g, (entry.variants.get(g) || 0) + 1);
         }
 
-        const sorted = Array.from(groups).sort((a, b) =>
-            a.toLowerCase().localeCompare(b.toLowerCase())
-        );
+        // For each key, pick the variant with the highest count (first seen on tie)
+        const groups = Array.from(groupMap.entries()).map(([key, entry]) => {
+            let bestName = null;
+            let bestCount = -1;
+            for (const [name, count] of entry.variants) {
+                if (count > bestCount) { bestName = name; bestCount = count; }
+            }
+            return { key, name: bestName };
+        });
+
+        groups.sort((a, b) => a.key.localeCompare(b.key));
 
         select.innerHTML = '<option value="">All groups</option>';
-        for (const g of sorted) {
+        for (const { key, name } of groups) {
             const opt = document.createElement('option');
-            opt.value = g.toLowerCase();
-            opt.textContent = g;
+            opt.value = key;
+            opt.textContent = name;
             select.appendChild(opt);
         }
 
@@ -539,6 +559,14 @@
                         ↓ Load pages
                     </button>
 
+                    <button id="f-stop"
+                        style="display:none; background:transparent; color:#f59e0b;
+                               border:1px solid rgba(245,158,11,0.35);
+                               border-radius:6px; padding:5px 12px; cursor:pointer; font-size:13px;
+                               height:30px; box-sizing:border-box; transition: all 0.2s;">
+                        ⏹ Stop
+                    </button>
+
                     <!-- Subtle separator -->
                     <div style="width:1px; height:20px; background:#30363d;"></div>
 
@@ -564,6 +592,11 @@
                     <span id="f-progress-pct" style="color:#8b949e; font-size:12px;"></span>
                 </div>
             </div>
+
+            <!-- Recommended use hint: only shown on pages without a clear category context -->
+            <div id="f-recommended-hint" style="display:none; margin-top:8px; color:#8b949e; font-size:11px;">
+                💡 For best results, search or browse a category first before loading pages.
+            </div>
         `;
 
         bar.addEventListener('mouseover', e => {
@@ -575,6 +608,10 @@
                 e.target.style.background = 'rgba(224,108,117,0.12)';
                 e.target.style.borderColor = 'rgba(224,108,117,0.6)';
             }
+            if (e.target.id === 'f-stop') {
+                e.target.style.background = 'rgba(245,158,11,0.12)';
+                e.target.style.borderColor = 'rgba(245,158,11,0.6)';
+            }
         });
         bar.addEventListener('mouseout', e => {
             if (e.target.id === 'f-loadall') {
@@ -584,6 +621,10 @@
             if (e.target.id === 'f-clear') {
                 e.target.style.background = 'transparent';
                 e.target.style.borderColor = 'rgba(224,108,117,0.35)';
+            }
+            if (e.target.id === 'f-stop') {
+                e.target.style.background = 'transparent';
+                e.target.style.borderColor = 'rgba(245,158,11,0.35)';
             }
         });
 
@@ -616,60 +657,81 @@
 
     // ─── Load pages ───────────────────────────────────────────────────────────
 
+    let currentAbortController = null;
+
+    function updateRecommendedHint() {
+        const hint = document.getElementById('f-recommended-hint');
+        if (!hint) return;
+        const path = window.location.pathname;
+        const onCategory = /\/(tag\/|quality\/|top-downloads)/.test(path);
+        const hasSearch = !!new URL(window.location.href).searchParams.get('s');
+        hint.style.display = (onCategory || hasSearch) ? 'none' : 'block';
+    }
+
     async function loadAllPages(container, statusEl) {
         const itemGrid = container.querySelector('.item_2.items') || container;
         const currentUrl = new URL(window.location.href);
 
-        // Determine limit based on dropdown choice
-        // We do NOT use maxPage as upper limit — HDEncode only shows 1,2,3 and "Last"
-        // meaning maxPage is always 3. Instead we keep fetching until a page returns
-        // no items or the chosen limit is reached.
         const limitVal = document.getElementById('f-pagelimit')?.value || 'all';
         const limit = limitVal === 'all' ? 99999 : parseInt(limitVal);
+
+        const loadBtn = document.getElementById('f-loadall');
+        const stopBtn = document.getElementById('f-stop');
+
+        currentAbortController = new AbortController();
+        const { signal } = currentAbortController;
+
+        if (stopBtn) stopBtn.style.display = 'inline-block';
 
         showProgress();
         updateProgress(0, limit === 99999 ? 1 : limit);
 
         let loaded = 0;
-        for (let p = 2; loaded < limit; p++) {
-            const url = currentUrl.pathname.match(/\/page\/\d+\//)
-                ? window.location.href.replace(/\/page\/\d+\//, `/page/${p}/`)
-                : currentUrl.origin + currentUrl.pathname.replace(/\/$/, '') + `/page/${p}/` + currentUrl.search;
+        try {
+            for (let p = 2; loaded < limit; p++) {
+                if (signal.aborted) break;
 
-            try {
-                const res = await fetch(url, { credentials: 'same-origin' });
-                if (!res.ok) break;
+                const url = currentUrl.pathname.match(/\/page\/\d+\//)
+                    ? window.location.href.replace(/\/page\/\d+\//, `/page/${p}/`)
+                    : currentUrl.origin + currentUrl.pathname.replace(/\/$/, '') + `/page/${p}/` + currentUrl.search;
 
-                const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-                const sourceGrid = doc.querySelector('.item_2.items') || doc;
+                try {
+                    const res = await fetch(url, { credentials: 'same-origin', signal });
+                    if (!res.ok) break;
 
-                // Remove pagination element from fetched pages so it doesn't appear in the grid
-                sourceGrid.querySelector('#paginador')?.remove();
+                    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+                    const sourceGrid = doc.querySelector('.item_2.items') || doc;
+                    sourceGrid.querySelector('#paginador')?.remove();
 
-                const fetchedItems = sourceGrid.querySelectorAll('.fit.item');
-                if (!fetchedItems.length) break; // no more items = last page reached
+                    const fetchedItems = sourceGrid.querySelectorAll('.fit.item');
+                    if (!fetchedItems.length) break;
 
-                const fragment = document.createDocumentFragment();
-                for (const node of fetchedItems) {
-                    const clone = document.importNode(node, true);
-                    clone.removeAttribute('style');
-                    fragment.appendChild(clone);
+                    const fragment = document.createDocumentFragment();
+                    for (const node of fetchedItems) {
+                        const clone = document.importNode(node, true);
+                        clone.removeAttribute('style');
+                        fragment.appendChild(clone);
+                    }
+                    itemGrid.appendChild(fragment);
+
+                    loaded++;
+                    if (limit !== 99999) updateProgress(loaded, limit);
+                    else {
+                        document.getElementById('f-progress-bar').style.width = '100%';
+                        document.getElementById('f-progress-label').textContent = `${loaded} page(s) loaded...`;
+                        document.getElementById('f-progress-pct').textContent = '';
+                    }
+                    await new Promise(r => setTimeout(r, 300));
+                } catch (e) {
+                    if (e.name === 'AbortError') break;
+                    console.error(`${SCRIPT_NAME}: fetch failed for`, url, e);
+                    break;
                 }
-                itemGrid.appendChild(fragment);
-
-                loaded++;
-                if (limit !== 99999) updateProgress(loaded, limit);
-                else {
-                    // For "all": show pages loaded as running count
-                    document.getElementById('f-progress-bar').style.width = '100%';
-                    document.getElementById('f-progress-label').textContent = `${loaded} page(s) loaded...`;
-                    document.getElementById('f-progress-pct').textContent = '';
-                }
-                await new Promise(r => setTimeout(r, 300));
-            } catch (e) {
-                console.error(`${SCRIPT_NAME}: fetch failed for`, url, e);
-                break;
             }
+        } finally {
+            currentAbortController = null;
+            if (stopBtn) stopBtn.style.display = 'none';
+            if (loadBtn) loadBtn.disabled = false;
         }
 
         hideProgress();
@@ -690,6 +752,10 @@
         }
 
         bar.querySelector('#f-clear').addEventListener('click', () => clearFilters(container));
+
+        bar.querySelector('#f-stop').addEventListener('click', () => {
+            if (currentAbortController) currentAbortController.abort();
+        });
 
         bar.querySelector('#f-loadall').addEventListener('click', async function () {
             this.disabled = true;
@@ -718,6 +784,7 @@
         loadFilters();
         applyFilters(container);
         injectLinkButtons(container);
+        updateRecommendedHint();
 
         let debounceTimer;
         new MutationObserver(() => {
