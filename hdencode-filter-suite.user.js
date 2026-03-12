@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.4
+// @version      1.5
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.4';
+    const SCRIPT_VERSION = '1.5';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -198,6 +198,7 @@
 
         for (const el of document.querySelectorAll(`#${SCRIPT_ID}-bar input, #${SCRIPT_ID}-bar select`)) {
             if (el.id === 'f-pagelimit') continue; // not a filter, don't highlight
+            if (el.id.startsWith('fs-persist-')) continue; // settings checkboxes, don't highlight
             const active = el.type === 'checkbox' ? el.checked : el.value !== '';
             el.style.borderColor = active ? '#00e5ff' : 'rgba(255,255,255,0.15)';
         }
@@ -205,12 +206,48 @@
         saveFilters();
     }
 
+    // ─── Settings (persistence preferences) ──────────────────────────────────
+
+    // These are the filter IDs the user can choose to persist or not.
+    // The key is the element ID, the value is a human-readable label.
+    const PERSISTABLE_FILTERS = {
+        'f-dv':        'Dolby Vision',
+        'f-hdr':       'HDR',
+        'f-res':       'Resolution',
+        'f-category':  'Content type',
+        'f-rating':    'Minimum rating',
+        'f-minsize':   'Min file size',
+        'f-maxsize':   'Max file size',
+        'f-group':     'Release group',
+        'f-search':    'Search text',
+        'f-pagelimit': 'Page limit',
+    };
+
+    function loadSettings() {
+        try {
+            return JSON.parse(localStorage.getItem('hdencodeSettings') || '{}');
+        } catch (_) { return {}; }
+    }
+
+    function saveSettings(settings) {
+        try { localStorage.setItem('hdencodeSettings', JSON.stringify(settings)); } catch (_) {}
+    }
+
+    function isFilterPersisted(id) {
+        const settings = loadSettings();
+        // f-pagelimit defaults to false (not persisted) unless explicitly enabled
+        if (id === 'f-pagelimit') return settings['persist_' + id] === true;
+        // All other filters default to true unless explicitly disabled
+        return settings['persist_' + id] !== false;
+    }
+
     // ─── LocalStorage ─────────────────────────────────────────────────────────
 
     function saveFilters() {
         const data = {};
         for (const el of document.querySelectorAll(`#${SCRIPT_ID}-bar input, #${SCRIPT_ID}-bar select`)) {
-            if (el.id === 'f-pagelimit') continue; // always reset to "All pages" on page load
+            if (el.id.startsWith('fs-persist-')) continue; // settings checkboxes, not filters
+            if (!isFilterPersisted(el.id)) continue; // skip if user opted out
             data[el.id] = el.type === 'checkbox' ? el.checked : el.value;
         }
         try { localStorage.setItem('hdencodeFilters', JSON.stringify(data)); } catch (_) {}
@@ -220,7 +257,8 @@
         try {
             const data = JSON.parse(localStorage.getItem('hdencodeFilters') || '{}');
             for (const [id, val] of Object.entries(data)) {
-                if (id === 'f-pagelimit') continue;
+                if (id.startsWith('fs-persist-')) continue;
+                if (!isFilterPersisted(id)) continue; // skip if user opted out
                 const el = document.getElementById(id);
                 if (!el) continue;
                 if (el.type === 'checkbox') el.checked = val;
@@ -231,7 +269,9 @@
 
     function clearFilters(container) {
         for (const el of document.querySelectorAll(`#${SCRIPT_ID}-bar input, #${SCRIPT_ID}-bar select`)) {
-            if (el.id === 'f-pagelimit') el.value = 'all'; // always reset to All pag., not empty
+            if (el.id.startsWith('fs-persist-')) continue; // never touch settings checkboxes
+            else if (el.id === 'f-pagelimit' && !isFilterPersisted('f-pagelimit')) el.value = 'all';
+            else if (el.id === 'f-pagelimit') continue; // user chose to persist it, leave it alone
             else if (el.type === 'checkbox') el.checked = false;
             else el.value = '';
         }
@@ -239,23 +279,41 @@
         applyFilters(container);
     }
 
-    // ─── Quick links ──────────────────────────────────────────────────────────
+    // ─── Quick links & NFO ────────────────────────────────────────────────────
 
     const linkCache = new Map();
+    const nfoCache  = new Map();
 
-    async function fetchLinks(url) {
-        if (linkCache.has(url)) return linkCache.get(url);
+    async function fetchDetailData(url) {
+        // Returns { links, nfo } — both cached separately so either can be used independently.
+        // We only fetch the detail page once; the NFO comes from the first GET,
+        // the links come from the POST response.
+
+        const linksAlready = linkCache.has(url);
+        const nfoAlready   = nfoCache.has(url);
+        if (linksAlready && nfoAlready) {
+            return { links: linkCache.get(url), nfo: nfoCache.get(url) };
+        }
 
         try {
-            // Step 1: GET the detail page to get the form and its tokens
+            // Step 1: GET the detail page
             const getRes = await fetch(url, { credentials: 'same-origin' });
-            if (!getRes.ok) return null;
+            if (!getRes.ok) return { links: null, nfo: null };
 
             const doc = new DOMParser().parseFromString(await getRes.text(), 'text/html');
 
-            // Step 2: Find the content protector form and collect all its fields
+            // Extract NFO from the single <pre> in .entry-content
+            const nfoText = doc.querySelector('.entry-content pre')?.innerText
+                         || doc.querySelector('.entry-content pre')?.textContent
+                         || null;
+            nfoCache.set(url, nfoText);
+
+            // Step 2: Find the content protector form
             const form = doc.querySelector('form[id^="content-protector-access-form"]');
-            if (!form) return null;
+            if (!form) {
+                linkCache.set(url, []);
+                return { links: [], nfo: nfoText };
+            }
 
             const formData = new FormData();
             for (const input of form.querySelectorAll('input')) {
@@ -269,11 +327,14 @@
                 credentials: 'same-origin',
                 body: formData,
             });
-            if (!postRes.ok) return null;
+            if (!postRes.ok) {
+                linkCache.set(url, []);
+                return { links: [], nfo: nfoText };
+            }
 
             const unlockedDoc = new DOMParser().parseFromString(await postRes.text(), 'text/html');
 
-            // Step 4: Extract links from blockquotes inside content-protector div
+            // Step 4: Extract links
             const HOST_NAMES = {
                 'rg': 'Rapidgator', 'rapidgator': 'Rapidgator',
                 'nf': 'Nitroflare', 'nitroflare': 'Nitroflare',
@@ -292,11 +353,76 @@
             }
 
             linkCache.set(url, links);
-            return links;
+            return { links, nfo: nfoText };
         } catch (e) {
-            console.error(`${SCRIPT_NAME}: failed to fetch links for`, url, e);
-            return null;
+            console.error(`${SCRIPT_NAME}: failed to fetch detail data for`, url, e);
+            return { links: null, nfo: null };
         }
+    }
+
+    // Keep fetchLinks as a thin wrapper so nothing else breaks
+    async function fetchLinks(url) {
+        const { links } = await fetchDetailData(url);
+        return links;
+    }
+
+    // Shared helper: attach copy-to-clipboard handlers to all .fs-copy-btn inside a panel
+    function attachCopyHandlers(panel) {
+        panel.querySelectorAll('.fs-copy-btn').forEach(copyBtn => {
+            copyBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const original = copyBtn.textContent;
+                try {
+                    await navigator.clipboard.writeText(copyBtn.dataset.url);
+                    copyBtn.textContent = '✓';
+                    copyBtn.style.color = '#00e5ff';
+                    copyBtn.style.borderColor = '#00e5ff';
+                    setTimeout(() => {
+                        copyBtn.textContent = original;
+                        copyBtn.style.color = '#8b949e';
+                        copyBtn.style.borderColor = '#30363d';
+                    }, 1500);
+                } catch (_) {
+                    copyBtn.textContent = '✗';
+                    setTimeout(() => { copyBtn.textContent = original; }, 1500);
+                }
+            });
+        });
+    }
+
+    function makeBtn(label, color, borderColor) {
+        const btn = document.createElement('span');
+        btn.innerHTML = label;
+        Object.assign(btn.style, {
+            cursor: 'pointer',
+            marginLeft: '8px',
+            fontSize: '11px',
+            color,
+            border: `1px solid ${borderColor}`,
+            borderRadius: '4px',
+            padding: '1px 7px',
+            background: 'transparent',
+            userSelect: 'none',
+            verticalAlign: 'middle',
+            whiteSpace: 'nowrap',
+            flexShrink: '0',
+        });
+        return btn;
+    }
+
+    function makePanel() {
+        const panel = document.createElement('div');
+        Object.assign(panel.style, {
+            display: 'none',
+            marginTop: '6px',
+            padding: '8px 10px',
+            background: '#161b22',
+            border: '1px solid #21262d',
+            borderRadius: '6px',
+            fontSize: '12px',
+            lineHeight: '1.8',
+        });
+        return panel;
     }
 
     function injectLinkButton(item) {
@@ -308,58 +434,34 @@
         const detailUrl = h5.querySelector('a')?.href;
         if (!detailUrl) return;
 
-        const btn = document.createElement('span');
-        btn.className = 'fs-link-btn';
-        btn.title = 'Show download links';
-        btn.innerHTML = '🔗 Links';
-        Object.assign(btn.style, {
-            cursor: 'pointer',
-            marginLeft: '8px',
-            fontSize: '11px',
-            color: '#00e5ff',
-            border: '1px solid rgba(0,229,255,0.35)',
-            borderRadius: '4px',
-            padding: '1px 7px',
-            background: 'transparent',
-            userSelect: 'none',
-            verticalAlign: 'middle',
-            whiteSpace: 'nowrap',
-            flexShrink: '0',
-        });
+        // ── Links button ──────────────────────────────────────────────────────
+        const linkBtn = makeBtn('🔗 Links', '#00e5ff', 'rgba(0,229,255,0.35)');
+        linkBtn.className = 'fs-link-btn';
+        linkBtn.title = 'Show download links';
 
-        const panel = document.createElement('div');
-        panel.className = 'fs-link-panel';
-        Object.assign(panel.style, {
-            display: 'none',
-            marginTop: '6px',
-            padding: '8px 10px',
-            background: '#161b22',
-            border: '1px solid #21262d',
-            borderRadius: '6px',
-            fontSize: '12px',
-            lineHeight: '1.8',
-        });
+        const linkPanel = makePanel();
+        linkPanel.className = 'fs-link-panel';
 
-        let open = false;
+        let linkOpen = false;
 
-        btn.addEventListener('click', async (e) => {
+        linkBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            if (open) {
-                panel.style.display = 'none';
-                btn.style.opacity = '0.6';
-                open = false;
+            if (linkOpen) {
+                linkPanel.style.display = 'none';
+                linkBtn.style.opacity = '0.6';
+                linkOpen = false;
                 return;
             }
 
-            btn.innerHTML = '⏳';
-            btn.style.opacity = '1';
+            linkBtn.innerHTML = '⏳';
+            linkBtn.style.opacity = '1';
 
-            const links = await fetchLinks(detailUrl);
+            const { links } = await fetchDetailData(detailUrl);
 
             if (!links || links.length === 0) {
-                panel.innerHTML = '<span style="color:#8b949e;">No links found.</span>';
+                linkPanel.innerHTML = '<span style="color:#8b949e;">No links found.</span>';
             } else {
                 const grouped = {};
                 for (const l of links) {
@@ -374,7 +476,7 @@
                     'Filefox': '#f97316', 'DDL': '#8b949e',
                 };
 
-                panel.innerHTML = Object.entries(grouped).map(([host, urls]) => {
+                linkPanel.innerHTML = Object.entries(grouped).map(([host, urls]) => {
                     const color = HOST_COLORS[host] || '#8b949e';
                     const allUrls = urls.join('\n');
                     return `<div style="margin-bottom:8px;">
@@ -409,40 +511,82 @@
                         ).join('<br>')}
                     </div>`;
                 }).join('');
+
+                attachCopyHandlers(linkPanel);
             }
 
-            btn.innerHTML = '🔗 Links';
-            panel.style.display = 'block';
-            open = true;
-
-            // Copy button handlers
-            panel.querySelectorAll('.fs-copy-btn').forEach(copyBtn => {
-                copyBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const urlToCopy = copyBtn.dataset.url;
-                    try {
-                        await navigator.clipboard.writeText(urlToCopy);
-                        copyBtn.textContent = '✓';
-                        copyBtn.style.color = '#00e5ff';
-                        copyBtn.style.borderColor = '#00e5ff';
-                        setTimeout(() => {
-                            copyBtn.textContent = '📋';
-                            copyBtn.style.color = '#8b949e';
-                            copyBtn.style.borderColor = '#30363d';
-                        }, 1500);
-                    } catch (_) {
-                        copyBtn.textContent = '✗';
-                        setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
-                    }
-                });
-            });
+            linkBtn.innerHTML = '🔗 Links';
+            linkPanel.style.display = 'block';
+            linkOpen = true;
         });
 
-        btn.addEventListener('mouseover', () => { if (!open) btn.style.background = 'rgba(0,229,255,0.08)'; });
-        btn.addEventListener('mouseout',  () => { if (!open) btn.style.background = 'transparent'; });
+        linkBtn.addEventListener('mouseover', () => { if (!linkOpen) linkBtn.style.background = 'rgba(0,229,255,0.08)'; });
+        linkBtn.addEventListener('mouseout',  () => { if (!linkOpen) linkBtn.style.background = 'transparent'; });
 
-        h5.appendChild(btn);
-        h5.after(panel);
+        // ── NFO button ────────────────────────────────────────────────────────
+        const nfoBtn = makeBtn('📄 NFO', '#a8b8c8', 'rgba(168,184,200,0.35)');
+        nfoBtn.className = 'fs-nfo-btn';
+        nfoBtn.title = 'Show NFO / media info';
+
+        const nfoPanel = makePanel();
+        nfoPanel.className = 'fs-nfo-panel';
+
+        let nfoOpen = false;
+
+        nfoBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (nfoOpen) {
+                nfoPanel.style.display = 'none';
+                nfoBtn.style.opacity = '0.6';
+                nfoOpen = false;
+                return;
+            }
+
+            nfoBtn.innerHTML = '⏳';
+            nfoBtn.style.opacity = '1';
+
+            const { nfo } = await fetchDetailData(detailUrl);
+
+            if (!nfo || !nfo.trim()) {
+                nfoPanel.innerHTML = '<span style="color:#8b949e;">No NFO found.</span>';
+            } else {
+                // Escape HTML so tags inside the NFO text render as text
+                const escaped = nfo
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                nfoPanel.innerHTML = `
+                    <pre style="
+                        margin: 0;
+                        font-family: 'Consolas', 'Courier New', monospace;
+                        font-size: 11px;
+                        line-height: 1.6;
+                        color: #c9d1d9;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        max-height: 400px;
+                        overflow-y: auto;
+                    ">${escaped}</pre>`;
+            }
+
+            nfoBtn.innerHTML = '📄 NFO';
+            nfoPanel.style.display = 'block';
+            nfoOpen = true;
+        });
+
+        nfoBtn.addEventListener('mouseover', () => { if (!nfoOpen) nfoBtn.style.background = 'rgba(168,184,200,0.08)'; });
+        nfoBtn.addEventListener('mouseout',  () => { if (!nfoOpen) nfoBtn.style.background = 'transparent'; });
+
+        // ── Inject into DOM ───────────────────────────────────────────────────
+        h5.appendChild(linkBtn);
+        h5.appendChild(nfoBtn);
+
+        // Both panels appear below the h5, NFO below links
+        h5.after(nfoPanel);
+        h5.after(linkPanel);
     }
 
     function injectLinkButtons(container) {
@@ -484,10 +628,33 @@
         });
 
         bar.innerHTML = `
-            <!-- Header row: title + counter -->
+            <!-- Header row: title + counter + gear -->
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
                 <strong style="color:#00e5ff; font-size:14px; letter-spacing:0.5px;">⚡ ${SCRIPT_NAME}</strong>
-                <span id="f-counter" style="color:#8b949e; font-size:12px;"></span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="f-counter" style="color:#8b949e; font-size:12px;"></span>
+                    <span id="f-settings-toggle" title="Advanced settings"
+                        style="cursor:pointer; color:#8b949e; font-size:14px; user-select:none;
+                               padding:2px 5px; border-radius:4px; transition:color 0.2s;"
+                        onmouseover="this.style.color='#e6edf3'"
+                        onmouseout="this.style.color='#8b949e'">⚙️</span>
+                </div>
+            </div>
+
+            <!-- Settings panel: hidden by default -->
+            <div id="f-settings-panel" style="display:none; margin-bottom:10px; padding:10px 12px;
+                background:#161b22; border:1px solid #21262d; border-radius:8px;">
+                <div style="color:#8b949e; font-size:11px; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Saved filters — uncheck to stop saving a filter between visits
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px 16px;">
+                    ${Object.entries(PERSISTABLE_FILTERS).map(([id, label]) => `
+                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:12px; color:#c9d1d9; white-space:nowrap;">
+                            <input type="checkbox" id="fs-persist-${id}" checked style="accent-color:#00e5ff;">
+                            <span>${label}</span>
+                        </label>
+                    `).join('')}
+                </div>
             </div>
 
             <!-- Row 1: quality filters left, category right -->
@@ -752,6 +919,39 @@
         }
 
         bar.querySelector('#f-clear').addEventListener('click', () => clearFilters(container));
+
+        // ── Settings panel toggle ────────────────────────────────────────────
+        const settingsToggle = bar.querySelector('#f-settings-toggle');
+        const settingsPanel  = bar.querySelector('#f-settings-panel');
+
+        // Load saved persistence preferences into the checkboxes
+        const savedSettings = loadSettings();
+        for (const id of Object.keys(PERSISTABLE_FILTERS)) {
+            const cb = document.getElementById(`fs-persist-${id}`);
+            if (!cb) continue;
+            if (id === 'f-pagelimit') {
+                cb.checked = savedSettings['persist_' + id] === true; // default false
+            } else {
+                cb.checked = savedSettings['persist_' + id] !== false; // default true
+            }
+        }
+
+        settingsToggle.addEventListener('click', () => {
+            const open = settingsPanel.style.display !== 'none';
+            settingsPanel.style.display = open ? 'none' : 'block';
+            settingsToggle.style.color = open ? '#8b949e' : '#00e5ff';
+        });
+
+        // Save persistence preference whenever a settings checkbox changes
+        for (const id of Object.keys(PERSISTABLE_FILTERS)) {
+            const cb = document.getElementById(`fs-persist-${id}`);
+            if (!cb) continue;
+            cb.addEventListener('change', () => {
+                const settings = loadSettings();
+                settings['persist_' + id] = cb.checked;
+                saveSettings(settings);
+            });
+        }
 
         bar.querySelector('#f-stop').addEventListener('click', () => {
             if (currentAbortController) currentAbortController.abort();

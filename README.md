@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.4-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.5-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -29,7 +29,7 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 - Persistent filters: settings are saved to your browser's local storage and restored when you return. No data is sent anywhere.
 - No results feedback: clear message when your filters return zero results, with your selection preserved
 - Active filter highlights: a subtle cyan border shows which filters are currently active
-- Quick links: click the "🔗 Links" button on any release to instantly fetch and display the download links without leaving the page. Hosters are shown with a colored indicator and their full name. Copy individual links or all links for a hoster at once with a single click.
+- Quick links & NFO: click the "🔗 Links" button on any release to instantly fetch and display the download links without leaving the page. Hosters are shown with a colored indicator and their full name. Copy individual links or all links for a hoster at once with a single click. Click "📄 NFO" to view the full media info (codec, resolution, audio, subtitles) in a scrollable panel — no extra network request, the info is loaded alongside the links.
 
 ---
 
@@ -108,7 +108,7 @@ The filter bar appears at the top of the release grid on any HDEncode page.
 |---|---|
 | All groups | Filter by release group, populated dynamically from current results |
 | Search anything | Free-text search across all release info |
-| All pages | Choose how many additional pages to load |
+| All pages | Choose how many additional pages to load — can optionally be saved via ⚙️ settings |
 | ↓ Load pages | Fetch additional pages into the current view with a live progress bar |
 | ✕ Clear | Reset all filters and restore the full list |
 
@@ -134,14 +134,18 @@ Works on all HDEncode pages including category pages, search results and tag pag
 
 Filter settings are saved to your browser's local storage and restored automatically when you return. Nothing is sent anywhere.
 
-What is saved:
+By default, all filters are saved between visits. You can customise this via the ⚙️ settings panel in the filter bar — uncheck any filter to stop saving it.
+
+Saved by default:
 - Dolby Vision, HDR, resolution, content type
 - Minimum IMDb rating, file size limits
 - Release group selection
 - Search text
 
-What is not saved:
-- The page limit dropdown — this always resets to "All pages" on a new visit
+Not saved by default (can be enabled via ⚙️):
+- Page limit — unchecked by default, so it always resets to "All pages" on a new visit
+
+Nothing is uploaded or shared.
 
 ---
 
@@ -160,6 +164,15 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.5
+- Added ⚙️ settings panel via a gear icon in the filter bar header
+- Users can now choose per filter whether it is saved between visits — all filters are saved by default
+- Settings preferences are stored separately from filter values and are never cleared by the Clear button
+- Added "📄 NFO" button next to the existing "🔗 Links" button on every release
+- Clicking it shows the full media info (codec, resolution, audio tracks, subtitles) in a scrollable panel inline
+- No extra network request — the NFO is extracted from the same detail page fetch that powers the links panel
+- Both panels are independent: open one, the other, or both at the same time
 
 ### v1.4
 - Added stop button to cancel page loading mid-way
