@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.5
+// @version      1.6
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.5';
+    const SCRIPT_VERSION = '1.6';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -131,6 +131,7 @@
 
     function getFilterValues() {
         return {
+            onlySDR:   document.getElementById('f-sdr')?.checked || false,
             onlyDV:    document.getElementById('f-dv')?.checked || false,
             onlyHDR:   document.getElementById('f-hdr')?.checked || false,
             res:       document.getElementById('f-res')?.value || '',
@@ -144,6 +145,7 @@
     }
 
     function itemMatchesFilters(item, f) {
+        if (f.onlySDR && (hasDV(item) || hasHDR(item))) return false;
         if (f.onlyDV && !hasDV(item)) return false;
         if (f.onlyHDR && !hasHDR(item)) return false;
         if (f.res && getResolution(item) !== f.res) return false;
@@ -185,7 +187,7 @@
 
         if (visible === 0 && items.length > 0) {
             const hasActiveFilters =
-                f.onlyDV || f.onlyHDR || f.res || f.category ||
+                f.onlySDR || f.onlyDV || f.onlyHDR || f.res || f.category ||
                 f.minRating > 0 || f.minSize > 0 || f.maxSize < Infinity ||
                 f.group || f.search;
 
@@ -211,6 +213,7 @@
     // These are the filter IDs the user can choose to persist or not.
     // The key is the element ID, the value is a human-readable label.
     const PERSISTABLE_FILTERS = {
+        'f-sdr':       'SDR',
         'f-dv':        'Dolby Vision',
         'f-hdr':       'HDR',
         'f-res':       'Resolution',
@@ -267,6 +270,35 @@
         } catch (_) {}
     }
 
+    function syncDynamicRangeState() {
+        const sdr = document.getElementById('f-sdr');
+        const hdr = document.getElementById('f-hdr');
+        const dv  = document.getElementById('f-dv');
+        if (!sdr || !hdr || !dv) return;
+
+        if (sdr.checked) {
+            hdr.checked  = false;
+            dv.checked   = false;
+            hdr.disabled = true;
+            dv.disabled  = true;
+            hdr.parentElement.style.opacity = '0.4';
+            dv.parentElement.style.opacity  = '0.4';
+            hdr.parentElement.style.cursor  = 'not-allowed';
+            dv.parentElement.style.cursor   = 'not-allowed';
+            hdr.title = 'Disabled when SDR is active';
+            dv.title  = 'Disabled when SDR is active';
+        } else {
+            hdr.disabled = false;
+            dv.disabled  = false;
+            hdr.parentElement.style.opacity = '';
+            dv.parentElement.style.opacity  = '';
+            hdr.parentElement.style.cursor  = '';
+            dv.parentElement.style.cursor   = '';
+            hdr.title = '';
+            dv.title  = '';
+        }
+    }
+
     function clearFilters(container) {
         for (const el of document.querySelectorAll(`#${SCRIPT_ID}-bar input, #${SCRIPT_ID}-bar select`)) {
             if (el.id.startsWith('fs-persist-')) continue; // never touch settings checkboxes
@@ -276,6 +308,7 @@
             else el.value = '';
         }
         try { localStorage.removeItem('hdencodeFilters'); } catch (_) {}
+        syncDynamicRangeState();
         applyFilters(container);
     }
 
@@ -661,10 +694,15 @@
             <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <label style="display:flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap;">
+                        <input type="checkbox" id="f-sdr" style="accent-color:#00e5ff;">
+                        <span>SDR</span>
+                    </label>
+                    <div style="width:1px; height:16px; background:#30363d;"></div>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap;" id="f-dv-label">
                         <input type="checkbox" id="f-dv" style="accent-color:#00e5ff;">
                         <span>Dolby Vision</span>
                     </label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;" id="f-hdr-label">
                         <input type="checkbox" id="f-hdr" style="accent-color:#00e5ff;">
                         <span>HDR</span>
                     </label>
@@ -976,12 +1014,21 @@
             }
         });
 
+        const sdrEl = document.getElementById('f-sdr');
+        if (sdrEl) {
+            sdrEl.addEventListener('change', () => {
+                syncDynamicRangeState();
+                applyFilters(container);
+            });
+        }
+
         for (const el of bar.querySelectorAll('input, select')) {
             el.addEventListener('input', () => applyFilters(container));
         }
 
         buildGroupDropdown(container);
         loadFilters();
+        syncDynamicRangeState();
         applyFilters(container);
         injectLinkButtons(container);
         updateRecommendedHint();

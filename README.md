@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.5-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.6-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -15,6 +15,7 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 
 **Filtering**
 - Dolby Vision & HDR: quickly isolate releases by HDR format
+- SDR: filter to releases without any HDR format — enabling SDR automatically disables the DV and HDR filters
 - Resolution: filter by 2160p, 1080p or 720p
 - Content type: separate Movies, TV Shows and TV Packs
 - Minimum IMDb rating
@@ -164,6 +165,11 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.6
+- Added SDR filter checkbox — shows only releases without Dolby Vision or HDR
+- Enabling SDR automatically disables and greys out the DV and HDR checkboxes to prevent conflicting filter states
+- Conflicting saved state (e.g. SDR + HDR both saved) is resolved automatically on load — SDR wins
 
 ### v1.5
 - Added ⚙️ settings panel via a gear icon in the filter bar header
