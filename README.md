@@ -96,6 +96,7 @@ The filter bar appears at the top of the release grid on any HDEncode page.
 
 | Control | Description |
 |---|---|
+| SDR | Show only releases without Dolby Vision or HDR — disables DV and HDR checkboxes when active |
 | Dolby Vision | Show only Dolby Vision releases |
 | HDR | Show only HDR releases |
 | All resolutions | Filter by 2160p, 1080p or 720p |
@@ -138,7 +139,7 @@ Filter settings are saved to your browser's local storage and restored automatic
 By default, all filters are saved between visits. You can customise this via the ⚙️ settings panel in the filter bar — uncheck any filter to stop saving it.
 
 Saved by default:
-- Dolby Vision, HDR, resolution, content type
+- SDR, Dolby Vision, HDR, resolution, content type
 - Minimum IMDb rating, file size limits
 - Release group selection
 - Search text
