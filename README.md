@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.6-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.7-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -166,6 +166,11 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.7
+- Fixed Dolby Vision and HDR detection after HDEncode updated their site markup
+- Detection now relies on dedicated DOM indicator elements (`.dvbutton`, `.buttonhdr`) which are always present regardless of how the release title is written
+- Title text parsing kept as fallback in case markup changes again
 
 ### v1.6
 - Added SDR filter checkbox — shows only releases without Dolby Vision or HDR

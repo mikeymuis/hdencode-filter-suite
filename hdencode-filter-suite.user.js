@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.6
+// @version      1.7
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,18 +24,25 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.6';
+    const SCRIPT_VERSION = '1.7';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
 
     function hasDV(item) {
-        const span = item.querySelector('.imdb_r span');
-        return !!span && span.getAttribute('style')?.includes('dv.png');
+        // Primary: dedicated DV indicator element
+        if (item.querySelector('.dvbutton, .dv-button, .buttonDV')) return true;
+        // Fallback: title text variants
+        const title = item.querySelector('h5 a')?.textContent || '';
+        return /\b(dovi|dolby[\.\s]?vision)\b/i.test(title);
     }
 
     function hasHDR(item) {
-        return item.querySelector('.buttonhdr') !== null;
+        // Primary: dedicated HDR indicator element
+        if (item.querySelector('.buttonhdr, .hdr-button, .buttonHDR')) return true;
+        // Fallback: title text variants
+        const title = item.querySelector('h5 a')?.textContent || '';
+        return /\b(hdr10\+?|hdr|hlg)\b/i.test(title);
     }
 
     function getRating(item) {
