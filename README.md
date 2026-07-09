@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.7-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.8-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -30,7 +30,7 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 - Persistent filters: settings are saved to your browser's local storage and restored when you return. No data is sent anywhere.
 - No results feedback: clear message when your filters return zero results, with your selection preserved
 - Active filter highlights: a subtle cyan border shows which filters are currently active
-- Quick links & NFO: click the "🔗 Links" button on any release to instantly fetch and display the download links without leaving the page. Hosters are shown with a colored indicator and their full name. Copy individual links or all links for a hoster at once with a single click. Click "📄 NFO" to view the full media info (codec, resolution, audio, subtitles) in a scrollable panel — no extra network request, the info is loaded alongside the links.
+- Quick links: click the "🔗 Links" button on any release to open the detail page in a new tab — one click directly to the download links
 
 ---
 
@@ -166,6 +166,12 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.8
+- HDEncode added Cloudflare Turnstile and ALTCHA bot protection to the download links form, making it impossible to fetch links silently via script
+- "🔗 Links" button now opens the detail page in a new tab instead — one click to get there, then click "View links" on the page itself
+- "📄 NFO" button updated to support HDEncode's new media info markup (`.minfo-body` with structured divs), with fallback to the old `<pre>` format for older releases
+- Inline link panel and copy buttons removed as they no longer function
 
 ### v1.7
 - Fixed Dolby Vision and HDR detection after HDEncode updated their site markup

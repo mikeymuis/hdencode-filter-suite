@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.7
+// @version      1.8
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.7';
+    const SCRIPT_VERSION = '1.8';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -474,94 +474,22 @@
         const detailUrl = h5.querySelector('a')?.href;
         if (!detailUrl) return;
 
-        // ── Links button ──────────────────────────────────────────────────────
+        // ── Links button — opens detail page in new tab ───────────────────────
+        // HDEncode now protects links with Cloudflare Turnstile + ALTCHA,
+        // which require JavaScript execution and cannot be solved via fetch.
+        // Opening the detail page directly is the most reliable approach.
         const linkBtn = makeBtn('🔗 Links', '#00e5ff', 'rgba(0,229,255,0.35)');
         linkBtn.className = 'fs-link-btn';
-        linkBtn.title = 'Show download links';
+        linkBtn.title = 'Open detail page to view download links';
 
-        const linkPanel = makePanel();
-        linkPanel.className = 'fs-link-panel';
-
-        let linkOpen = false;
-
-        linkBtn.addEventListener('click', async (e) => {
+        linkBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-
-            if (linkOpen) {
-                linkPanel.style.display = 'none';
-                linkBtn.style.opacity = '0.6';
-                linkOpen = false;
-                return;
-            }
-
-            linkBtn.innerHTML = '⏳';
-            linkBtn.style.opacity = '1';
-
-            const { links } = await fetchDetailData(detailUrl);
-
-            if (!links || links.length === 0) {
-                linkPanel.innerHTML = '<span style="color:#8b949e;">No links found.</span>';
-            } else {
-                const grouped = {};
-                for (const l of links) {
-                    if (!grouped[l.host]) grouped[l.host] = [];
-                    grouped[l.host].push(l.url);
-                }
-
-                const HOST_COLORS = {
-                    'Rapidgator': '#00b4d8', 'Nitroflare': '#f59e0b',
-                    'Mega': '#e74c3c', '1Fichier': '#8b5cf6',
-                    'Uploadgig': '#22c55e', 'Katfile': '#ec4899',
-                    'Filefox': '#f97316', 'DDL': '#8b949e',
-                };
-
-                linkPanel.innerHTML = Object.entries(grouped).map(([host, urls]) => {
-                    const color = HOST_COLORS[host] || '#8b949e';
-                    const allUrls = urls.join('\n');
-                    return `<div style="margin-bottom:8px;">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;">
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${color}; flex-shrink:0;"></span>
-                                <span style="color:#8b949e; text-transform:uppercase; font-size:10px; letter-spacing:0.5px; font-weight:600;">${host}</span>
-                            </div>
-                            ${urls.length > 1 ? `<span class="fs-copy-btn" data-url="${allUrls}" title="Copy all ${host} links"
-                                style="cursor:pointer; font-size:10px; color:#8b949e; white-space:nowrap;
-                                       padding:1px 6px; border:1px solid #30363d; border-radius:4px;
-                                       user-select:none; flex-shrink:0;"
-                                onmouseover="this.style.color='#e6edf3'; this.style.borderColor='#8b949e';"
-                                onmouseout="this.style.color='#8b949e'; this.style.borderColor='#30363d';"
-                            >📋 Copy all</span>` : ''}
-                        </div>
-                        ${urls.map(u =>
-                            `<span style="display:inline-flex; align-items:center; gap:6px; margin:1px 0;">
-                                <a href="${u}" target="_blank"
-                                    style="color:#00e5ff; text-decoration:none; word-break:break-all;"
-                                    onmouseover="this.style.textDecoration='underline'"
-                                    onmouseout="this.style.textDecoration='none'"
-                                >${u}</a>
-                                <span class="fs-copy-btn" data-url="${u}" title="Copy link"
-                                    style="cursor:pointer; font-size:11px; color:#8b949e; white-space:nowrap;
-                                           padding:1px 5px; border:1px solid #30363d; border-radius:4px;
-                                           user-select:none; flex-shrink:0;"
-                                    onmouseover="this.style.color='#e6edf3'; this.style.borderColor='#8b949e';"
-                                    onmouseout="this.style.color='#8b949e'; this.style.borderColor='#30363d';"
-                                >📋</span>
-                            </span>`
-                        ).join('<br>')}
-                    </div>`;
-                }).join('');
-
-                attachCopyHandlers(linkPanel);
-            }
-
-            linkBtn.innerHTML = '🔗 Links';
-            linkPanel.style.display = 'block';
-            linkOpen = true;
+            window.open(detailUrl, '_blank');
         });
 
-        linkBtn.addEventListener('mouseover', () => { if (!linkOpen) linkBtn.style.background = 'rgba(0,229,255,0.08)'; });
-        linkBtn.addEventListener('mouseout',  () => { if (!linkOpen) linkBtn.style.background = 'transparent'; });
+        linkBtn.addEventListener('mouseover', () => { linkBtn.style.background = 'rgba(0,229,255,0.08)'; });
+        linkBtn.addEventListener('mouseout',  () => { linkBtn.style.background = 'transparent'; });
 
         // ── NFO button ────────────────────────────────────────────────────────
         const nfoBtn = makeBtn('📄 NFO', '#a8b8c8', 'rgba(168,184,200,0.35)');
@@ -587,13 +515,61 @@
             nfoBtn.innerHTML = '⏳';
             nfoBtn.style.opacity = '1';
 
-            const { nfo } = await fetchDetailData(detailUrl);
+            let nfoText = null;
 
-            if (!nfo || !nfo.trim()) {
+            // Check cache first
+            if (nfoCache.has(detailUrl)) {
+                nfoText = nfoCache.get(detailUrl);
+            } else {
+                try {
+                    const res = await fetch(detailUrl, { credentials: 'same-origin' });
+                    if (res.ok) {
+                        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+
+                        // New markup: .minfo-body with structured divs
+                        const minfoBody = doc.querySelector('.minfo-body');
+                        if (minfoBody) {
+                            // Extract rows as "Key: Value" lines
+                            const lines = [];
+                            const header = minfoBody.querySelector('.minfo-header');
+                            if (header) lines.push(header.textContent.trim(), '');
+
+                            for (const section of minfoBody.querySelectorAll('.minfo-section-title')) {
+                                lines.push('', section.textContent.trim());
+                                const table = section.nextElementSibling;
+                                if (table) {
+                                    for (const row of table.querySelectorAll('.minfo-row')) {
+                                        const key = row.querySelector('.minfo-key')?.textContent.trim() || '';
+                                        const val = row.querySelector('.minfo-value')?.textContent.trim() || '';
+                                        if (key) lines.push(`${key.padEnd(12)}: ${val}`);
+                                    }
+                                }
+                            }
+
+                            // Subtitles
+                            const subs = [...minfoBody.querySelectorAll('.minfo-sub')].map(s => s.textContent.trim());
+                            if (subs.length) {
+                                lines.push('', 'Subtitles');
+                                subs.forEach(s => lines.push(`  ${s}`));
+                            }
+
+                            nfoText = lines.join('\n');
+                        } else {
+                            // Fallback: old <pre> markup
+                            nfoText = doc.querySelector('.entry-content pre')?.textContent || null;
+                        }
+
+                        nfoCache.set(detailUrl, nfoText);
+                    }
+                } catch (e) {
+                    console.error(`${SCRIPT_NAME}: NFO fetch failed`, e);
+                }
+            }
+
+            if (!nfoText || !nfoText.trim()) {
                 nfoPanel.innerHTML = '<span style="color:#8b949e;">No NFO found.</span>';
             } else {
-                // Escape HTML so tags inside the NFO text render as text
-                const escaped = nfo
+                const escaped = nfoText
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
@@ -624,9 +600,7 @@
         h5.appendChild(linkBtn);
         h5.appendChild(nfoBtn);
 
-        // Both panels appear below the h5, NFO below links
         h5.after(nfoPanel);
-        h5.after(linkPanel);
     }
 
     function injectLinkButtons(container) {
