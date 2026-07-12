@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.8-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.9-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -14,7 +14,7 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 ## Features
 
 **Filtering**
-- Dolby Vision & HDR: quickly isolate releases by HDR format
+- Dolby Vision & HDR: filter releases by HDR format — check DV, HDR, or both. Checking both shows only releases that have both formats. DV and HDR are independent and can be combined freely
 - SDR: filter to releases without any HDR format — enabling SDR automatically disables the DV and HDR filters
 - Resolution: filter by 2160p, 1080p or 720p
 - Content type: separate Movies, TV Shows and TV Packs
@@ -30,7 +30,9 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 - Persistent filters: settings are saved to your browser's local storage and restored when you return. No data is sent anywhere.
 - No results feedback: clear message when your filters return zero results, with your selection preserved
 - Active filter highlights: a subtle cyan border shows which filters are currently active
-- Quick links: click the "🔗 Links" button on any release to open the detail page in a new tab — one click directly to the download links
+- Quick links: click the "🔗 Links" button on any release to open the detail page in a new tab. The script automatically clicks "View links" once the security check completes. A links panel appears at the top of the page with copy buttons per link and per hoster. On the detail page itself, copy buttons are injected next to every link and next to the hoster image
+- NFO viewer: click "📄 NFO" on any release to view media info inline without leaving the page
+- Detail page settings: a ⚙️ Settings button in the links panel lets you choose whether to scroll to the panel or to the original download links, and configure auto-copy to automatically copy all links from a chosen hoster on page load
 
 ---
 
@@ -166,6 +168,14 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v1.9
+- "🔗 Links" button opens the detail page in a new tab and automatically clicks "View links" once Cloudflare Turnstile and ALTCHA complete — no manual interaction needed
+- A links panel is injected at the top of the detail page with links grouped per hoster, colored dot indicators, "📋 Copy all" per hoster and "📋" per individual link
+- Copy buttons injected next to every link in the original download section, and "📋 Copy all" next to the hoster image for multi-part releases
+- ⚙️ Settings button in the links panel with two options saved between visits: scroll target (our panel at top or original links at bottom) and auto-copy (automatically copy all links from a chosen hoster on page load)
+- Fixed DV and HDR filters to work independently and additively: checking DV shows releases with DV regardless of HDR, checking HDR shows releases with HDR regardless of DV, checking both shows only releases that have both formats
+- Works on both old-style pages (links already visible) and new-style pages (Turnstile/ALTCHA protected)
 
 ### v1.8
 - HDEncode added Cloudflare Turnstile and ALTCHA bot protection to the download links form, making it impossible to fetch links silently via script

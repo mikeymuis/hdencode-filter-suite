@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.8
+// @version      1.9
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.8';
+    const SCRIPT_VERSION = '1.9';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -153,8 +153,9 @@
 
     function itemMatchesFilters(item, f) {
         if (f.onlySDR && (hasDV(item) || hasHDR(item))) return false;
-        if (f.onlyDV && !hasDV(item)) return false;
-        if (f.onlyHDR && !hasHDR(item)) return false;
+        if (f.onlyDV && f.onlyHDR && !(hasDV(item) && hasHDR(item))) return false;
+        if (f.onlyDV && !f.onlyHDR && !hasDV(item)) return false;
+        if (f.onlyHDR && !f.onlyDV && !hasHDR(item)) return false;
         if (f.res && getResolution(item) !== f.res) return false;
         if (f.category && getCategory(item) !== f.category) return false;
         if (getRating(item) < f.minRating) return false;
@@ -1024,11 +1025,286 @@
         }).observe(container, { childList: true, subtree: true });
     }
 
+    // ─── Detail page: auto-click View links + copy links to top ──────────────
+
+    function isDetailPage() {
+        return !!document.querySelector('#single .entry-content');
+    }
+
+    function initDetailPage() {
+        // Check if links are already visible (no form/button needed)
+        const existingBlockquotes = document.querySelectorAll('.content-protector-access-form blockquote');
+        if (existingBlockquotes.length) {
+            waitForLinksAndInject();
+            return;
+        }
+
+        // Otherwise wait for the content protector form and auto-click
+        const form = document.querySelector('form[id^="content-protector-access-form"]');
+        const submitBtn = form?.querySelector('input[type="submit"]');
+        if (!form || !submitBtn) return;
+
+        // Poll until the button is enabled (Turnstile + ALTCHA done)
+        const poll = setInterval(() => {
+            const btn = form.querySelector('input[type="submit"]');
+            if (!btn || btn.disabled) return;
+
+            clearInterval(poll);
+
+            // Auto-click the button
+            btn.click();
+
+            // After click, wait for links to appear and inject copy buttons
+            waitForLinksAndInject();
+        }, 300);
+    }
+
+    function loadDetailSettings() {
+        try { return JSON.parse(localStorage.getItem('hdencodeDetailSettings') || '{}'); }
+        catch (_) { return {}; }
+    }
+
+    function saveDetailSettings(s) {
+        try { localStorage.setItem('hdencodeDetailSettings', JSON.stringify(s)); } catch (_) {}
+    }
+
+    function waitForLinksAndInject() {
+        let attempts = 0;
+        const check = setInterval(() => {
+            attempts++;
+            if (attempts > 60) { clearInterval(check); return; }
+
+            const blockquotes = document.querySelectorAll('.content-protector-access-form blockquote');
+            if (!blockquotes.length) return;
+
+            clearInterval(check);
+
+            const HOST_COLORS = {
+                'rapidgator': '#00b4d8', 'rg': '#00b4d8',
+                'nitroflare': '#f59e0b', 'nf': '#f59e0b',
+                'mega': '#e74c3c', '1fichier': '#8b5cf6',
+                'uploadgig': '#22c55e', 'ul': '#22c55e',
+                'katfile': '#ec4899', 'filefox': '#f97316',
+            };
+            const HOST_NAMES = {
+                'rg': 'Rapidgator', 'rapidgator': 'Rapidgator',
+                'nf': 'Nitroflare', 'nitroflare': 'Nitroflare',
+                'mega': 'Mega', '1fichier': '1Fichier',
+                'ul': 'Uploadgig', 'uploadgig': 'Uploadgig',
+                'katfile': 'Katfile', 'filefox': 'Filefox',
+            };
+
+            const grouped = {};
+            for (const bq of blockquotes) {
+                const img = bq.previousElementSibling?.querySelector('img');
+                const raw = (img?.alt || img?.src?.split('/').pop().replace(/\.(png|jpg|gif)$/i, '') || 'Link').toLowerCase().trim();
+                const host = HOST_NAMES[raw] || raw.charAt(0).toUpperCase() + raw.slice(1);
+                const color = HOST_COLORS[raw] || '#8b949e';
+                if (!grouped[host]) grouped[host] = { color, urls: [] };
+                for (const a of bq.querySelectorAll('a')) grouped[host].urls.push(a.href);
+            }
+
+            if (!Object.keys(grouped).length) return;
+
+            const settings   = loadDetailSettings();
+            const scrollTo   = settings.scrollTarget  || 'panel';
+            const autoCopy   = settings.autoCopyHost  || '';
+            const hostOptions = Object.keys(grouped);
+
+            // ── Settings sub-panel ────────────────────────────────────────────
+            const settingsPanel = document.createElement('div');
+            settingsPanel.id = 'fs-detail-settings';
+            Object.assign(settingsPanel.style, {
+                display: 'none',
+                marginTop: '10px',
+                padding: '10px 12px',
+                background: '#161b22',
+                border: '1px solid #21262d',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: '#c9d1d9',
+            });
+            settingsPanel.innerHTML = `
+                <div style="display:flex; flex-wrap:wrap; gap:12px 24px; align-items:flex-start;">
+                    <div>
+                        <div style="color:#8b949e; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Scroll to</div>
+                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer; margin-bottom:4px;">
+                            <input type="radio" name="fs-scroll" value="panel" ${scrollTo === 'panel' ? 'checked' : ''} style="accent-color:#00e5ff;">
+                            <span>Our panel (top)</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                            <input type="radio" name="fs-scroll" value="links" ${scrollTo === 'links' ? 'checked' : ''} style="accent-color:#00e5ff;">
+                            <span>Download links (bottom)</span>
+                        </label>
+                    </div>
+                    <div>
+                        <div style="color:#8b949e; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Auto-copy on load</div>
+                        <select id="fs-autocopy-select" style="background:#0d1117; color:#e6edf3; border:1px solid #30363d; border-radius:5px; padding:4px 8px; font-size:12px;">
+                            <option value="">Off</option>
+                            ${hostOptions.map(h => `<option value="${h}" ${autoCopy === h ? 'selected' : ''}>${h}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>`;
+
+            // ── Main panel ────────────────────────────────────────────────────
+            const panel = document.createElement('div');
+            panel.id = 'fs-detail-links-panel';
+            Object.assign(panel.style, {
+                background: '#0d1117',
+                border: '1px solid #21262d',
+                borderRadius: '10px',
+                padding: '14px 16px',
+                marginBottom: '16px',
+                fontFamily: 'sans-serif',
+                fontSize: '13px',
+                color: '#e6edf3',
+            });
+
+            panel.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <div style="color:#00e5ff; font-weight:600; font-size:13px; letter-spacing:0.3px;">⚡ Download Links</div>
+                    <button id="fs-detail-gear" title="Settings" style="cursor:pointer; color:#c9d1d9; font-size:12px; user-select:none; padding:3px 10px; border-radius:5px; background:#21262d; border:1px solid #444c56;">⚙️ Settings</button>
+                </div>
+                ${Object.entries(grouped).map(([host, { color, urls }]) => `
+                    <div style="margin-bottom:10px;">
+                        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${color};"></span>
+                            <span style="color:#8b949e; text-transform:uppercase; font-size:10px; letter-spacing:0.5px; font-weight:600;">${host}</span>
+                            <span class="fs-copy-all" data-urls="${urls.join('\n')}"
+                                style="cursor:pointer; font-size:10px; color:#8b949e; padding:1px 6px;
+                                       border:1px solid #30363d; border-radius:4px; user-select:none;"
+                                onmouseover="this.style.color='#e6edf3'" onmouseout="this.style.color='#8b949e'">
+                                📋 Copy all
+                            </span>
+                        </div>
+                        ${urls.map(u => `
+                            <div style="display:flex; align-items:center; gap:6px; margin:3px 0;">
+                                <a href="${u}" target="_blank"
+                                    style="color:#00e5ff; text-decoration:none; word-break:break-all; font-size:12px;"
+                                    onmouseover="this.style.textDecoration='underline'"
+                                    onmouseout="this.style.textDecoration='none'">${u}</a>
+                                <span class="fs-copy-one" data-url="${u}"
+                                    style="cursor:pointer; font-size:11px; color:#8b949e; padding:1px 5px;
+                                           border:1px solid #30363d; border-radius:4px; user-select:none; flex-shrink:0;"
+                                    onmouseover="this.style.color='#e6edf3'" onmouseout="this.style.color='#8b949e'">📋</span>
+                            </div>`).join('')}
+                    </div>`).join('')}`;
+
+            panel.appendChild(settingsPanel);
+
+            // Copy handlers in panel
+            panel.querySelectorAll('.fs-copy-all').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await navigator.clipboard.writeText(btn.dataset.urls);
+                    const orig = btn.textContent.trim();
+                    btn.textContent = '✓ Copied'; btn.style.color = '#00e5ff';
+                    setTimeout(() => { btn.textContent = orig; btn.style.color = '#8b949e'; }, 1500);
+                });
+            });
+            panel.querySelectorAll('.fs-copy-one').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await navigator.clipboard.writeText(btn.dataset.url);
+                    btn.textContent = '✓'; btn.style.color = '#00e5ff';
+                    setTimeout(() => { btn.textContent = '📋'; btn.style.color = '#8b949e'; }, 1500);
+                });
+            });
+
+            // Gear toggle
+            panel.querySelector('#fs-detail-gear').addEventListener('click', () => {
+                settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+            });
+
+            // Settings: scroll target
+            settingsPanel.querySelectorAll('input[name="fs-scroll"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    const s = loadDetailSettings(); s.scrollTarget = radio.value; saveDetailSettings(s);
+                });
+            });
+
+            // Settings: auto-copy host
+            settingsPanel.querySelector('#fs-autocopy-select').addEventListener('change', function () {
+                const s = loadDetailSettings(); s.autoCopyHost = this.value; saveDetailSettings(s);
+            });
+
+            // Insert at top of #single
+            const single = document.querySelector('#single');
+            if (single) single.insertBefore(panel, single.firstChild);
+
+            // Scroll behavior
+            if (scrollTo === 'panel') {
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                document.querySelector('#unlocked')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            // Auto-copy
+            if (autoCopy && grouped[autoCopy]) {
+                navigator.clipboard.writeText(grouped[autoCopy].urls.join('\n')).catch(() => {});
+            }
+
+            // ── Copy buttons in original section ─────────────────────────────
+            for (const bq of blockquotes) {
+                const links = bq.querySelectorAll('a');
+                if (!links.length) continue;
+
+                if (links.length > 1) {
+                    const img = bq.previousElementSibling?.querySelector('img');
+                    if (img && !img.parentElement.querySelector('.fs-copy-all-inline')) {
+                        const allUrls = [...links].map(a => a.href).join('\n');
+                        const copyAllBtn = document.createElement('button');
+                        copyAllBtn.className = 'fs-copy-all-inline';
+                        copyAllBtn.textContent = '📋 Copy all';
+                        Object.assign(copyAllBtn.style, {
+                            cursor: 'pointer', fontSize: '12px', color: '#e6edf3',
+                            background: '#21262d', border: '1px solid #444c56',
+                            borderRadius: '5px', padding: '4px 10px',
+                            userSelect: 'none', marginLeft: '10px', verticalAlign: 'middle',
+                        });
+                        copyAllBtn.addEventListener('click', async () => {
+                            await navigator.clipboard.writeText(allUrls);
+                            copyAllBtn.textContent = '✓ Copied'; copyAllBtn.style.color = '#00e5ff'; copyAllBtn.style.borderColor = '#00e5ff';
+                            setTimeout(() => { copyAllBtn.textContent = '📋 Copy all'; copyAllBtn.style.color = '#e6edf3'; copyAllBtn.style.borderColor = '#444c56'; }, 1500);
+                        });
+                        img.after(copyAllBtn);
+                    }
+                }
+
+                for (const a of links) {
+                    if (a.parentElement.classList.contains('fs-link-row')) continue;
+                    const row = document.createElement('div');
+                    row.className = 'fs-link-row';
+                    Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' });
+                    a.parentNode.insertBefore(row, a);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.textContent = '📋 Copy';
+                    Object.assign(copyBtn.style, {
+                        cursor: 'pointer', fontSize: '12px', color: '#e6edf3',
+                        background: '#21262d', border: '1px solid #444c56',
+                        borderRadius: '5px', padding: '4px 10px',
+                        userSelect: 'none', flexShrink: '0', whiteSpace: 'nowrap',
+                    });
+                    copyBtn.addEventListener('click', async () => {
+                        await navigator.clipboard.writeText(a.href);
+                        copyBtn.textContent = '✓ Copied'; copyBtn.style.color = '#00e5ff'; copyBtn.style.borderColor = '#00e5ff';
+                        setTimeout(() => { copyBtn.textContent = '📋 Copy'; copyBtn.style.color = '#e6edf3'; copyBtn.style.borderColor = '#444c56'; }, 1500);
+                    });
+                    row.appendChild(copyBtn);
+                    row.appendChild(a);
+                }
+            }
+
+        }, 300);
+    }
+
     function findContainer() {
         return document.querySelector('div.peliculas') || document.querySelector('.box');
     }
 
     function waitForContainer() {
+        if (isDetailPage()) {
+            initDetailPage();
+            return;
+        }
         const container = findContainer();
         if (container) {
             init(container);
