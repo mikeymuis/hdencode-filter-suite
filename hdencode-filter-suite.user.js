@@ -30,20 +30,30 @@
     // ─── Helpers: item data extraction ───────────────────────────────────────
 
     function hasDV(item) {
-        // Primary: dedicated DV indicator element
-        if (item.querySelector('.dvbutton, .dv-button, .buttonDV')) return true;
-        // Fallback: title text variants
+        // Check title text first — most reliable
         const title = item.querySelector('h5 a')?.textContent || '';
-        return /\b(dovi|dolby[\.\s]?vision)\b/i.test(title);
+        if (/\b(dovi|dv|dolby[\.\s]?vision)\b/i.test(title)) return true;
+        // Fallback: DOM indicator elements
+        return !!item.querySelector('.dvbutton, .dv-button, .buttonDV');
     }
 
     function hasHDR(item) {
-        // Primary: dedicated HDR indicator element
-        if (item.querySelector('.buttonhdr, .hdr-button, .buttonHDR')) return true;
-        // Fallback: title text variants
+        // Check title text first — most reliable
         const title = item.querySelector('h5 a')?.textContent || '';
-        return /\b(hdr10\+?|hdr|hlg)\b/i.test(title);
+        if (/\b(hdr10\+?|hdr|hlg)\b/i.test(title)) return true;
+        // Fallback: DOM indicator elements (note: .buttonhdr is a <style> tag, may behave oddly)
+        return !!item.querySelector('.buttonhdr, .hdr-button, .buttonHDR');
     }
+
+    function getDynamicRange(item) {
+    const hdr = hasHDR(item);
+    const dv  = hasDV(item);
+
+    if (hdr && dv) return 'hdr+dv';
+    if (hdr) return 'hdr';
+    if (dv) return 'dv';
+    return 'sdr';
+}
 
     function getRating(item) {
         const match = item.innerText.match(/Rating\s*:\s*(\d+\.\d+)\/10/i);
@@ -151,20 +161,38 @@
         };
     }
 
-    function itemMatchesFilters(item, f) {
-        if (f.onlySDR && (hasDV(item) || hasHDR(item))) return false;
-        if (f.onlyDV && f.onlyHDR && !(hasDV(item) && hasHDR(item))) return false;
-        if (f.onlyDV && !f.onlyHDR && !hasDV(item)) return false;
-        if (f.onlyHDR && !f.onlyDV && !hasHDR(item)) return false;
-        if (f.res && getResolution(item) !== f.res) return false;
-        if (f.category && getCategory(item) !== f.category) return false;
-        if (getRating(item) < f.minRating) return false;
-        const size = getSize(item);
-        if (size !== null && (size < f.minSize || size > f.maxSize)) return false;
-        if (f.group && getGroup(item).toLowerCase() !== f.group) return false;
-        if (f.search && !item.innerText.toLowerCase().includes(f.search)) return false;
-        return true;
+function itemMatchesFilters(item, f) {
+
+    const dr = getDynamicRange(item);
+
+    // Dynamic range filtering
+    if (f.onlySDR && dr !== 'sdr') return false;
+
+    if (f.onlyHDR && f.onlyDV) {
+        // Both selected = only HDR + Dolby Vision releases
+        if (dr !== 'hdr+dv') return false;
     }
+    else if (f.onlyHDR) {
+        // HDR only
+        if (dr !== 'hdr') return false;
+    }
+    else if (f.onlyDV) {
+        // Dolby Vision only
+        if (dr !== 'dv') return false;
+    }
+
+    if (f.res && getResolution(item) !== f.res) return false;
+    if (f.category && getCategory(item) !== f.category) return false;
+    if (getRating(item) < f.minRating) return false;
+
+    const size = getSize(item);
+    if (size !== null && (size < f.minSize || size > f.maxSize)) return false;
+
+    if (f.group && getGroup(item).toLowerCase() !== f.group) return false;
+    if (f.search && !item.innerText.toLowerCase().includes(f.search)) return false;
+
+    return true;
+}
 
     function applyFilters(container) {
         const f = getFilterValues();
