@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-1.9-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.0-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -14,7 +14,7 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 ## Features
 
 **Filtering**
-- Dolby Vision & HDR: filter releases by HDR format — check DV, HDR, or both. Checking both shows only releases that have both formats. DV and HDR are independent and can be combined freely
+- Dolby Vision & HDR: filter releases exclusively by HDR format — checking DV shows only releases with DV but without HDR, checking HDR shows only releases with HDR but without DV, checking both shows only releases that have both formats simultaneously
 - SDR: filter to releases without any HDR format — enabling SDR automatically disables the DV and HDR filters
 - Resolution: filter by 2160p, 1080p or 720p
 - Content type: separate Movies, TV Shows and TV Packs
@@ -32,7 +32,8 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 - Active filter highlights: a subtle cyan border shows which filters are currently active
 - Quick links: click the "🔗 Links" button on any release to open the detail page in a new tab. The script automatically clicks "View links" once the security check completes. A links panel appears at the top of the page with copy buttons per link and per hoster. On the detail page itself, copy buttons are injected next to every link and next to the hoster image
 - NFO viewer: click "📄 NFO" on any release to view media info inline without leaving the page
-- Detail page settings: a ⚙️ Settings button in the links panel lets you choose whether to scroll to the panel or to the original download links, and configure auto-copy to automatically copy all links from a chosen hoster on page load
+- Detail page settings: a ⚙️ Settings button in the links panel lets you choose whether to scroll to the panel, to the original download links, or turn auto-scroll off entirely. Configure auto-copy to automatically copy all links from a chosen hoster on page load
+- Toast notifications: a subtle notification appears in the bottom-right corner whenever a link is copied, so you always get confirmation regardless of where you are on the page
 
 ---
 
@@ -99,8 +100,9 @@ The filter bar appears at the top of the release grid on any HDEncode page.
 | Control | Description |
 |---|---|
 | SDR | Show only releases without Dolby Vision or HDR — disables DV and HDR checkboxes when active |
-| Dolby Vision | Show only Dolby Vision releases |
-| HDR | Show only HDR releases |
+| Dolby Vision | Show only releases with exclusively Dolby Vision (no HDR) |
+| HDR | Show only releases with exclusively HDR (no Dolby Vision) |
+| Dolby Vision + HDR | Check both to show releases that have both formats simultaneously |
 | All resolutions | Filter by 2160p, 1080p or 720p |
 | Min rating | Hide releases below this IMDb rating |
 | Min GB / Max GB | Filter by file size |
@@ -168,6 +170,12 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v2.0
+- Added "Off" option to the scroll setting in ⚙️ Settings — page stays at the top after links load, including suppressing HDEncode's own anchor scroll to `#unlocked`
+- Toast notifications: a prominent popup appears in the bottom-right corner whenever a link is copied, confirming the action regardless of scroll position. Works for all copy buttons: individual links, "Copy all" per hoster, and auto-copy on load
+- Fixed DV and HDR filters to be fully exclusive: checking DV shows only releases with DV but without HDR, checking HDR shows only releases with HDR but without DV, checking both shows only releases that have both formats simultaneously
+- Improved DV and HDR detection reliability by using `getElementsByClassName` for `<style>` tag indicators
 
 ### v1.9
 - "🔗 Links" button opens the detail page in a new tab and automatically clicks "View links" once Cloudflare Turnstile and ALTCHA complete — no manual interaction needed

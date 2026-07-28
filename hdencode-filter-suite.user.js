@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      1.9
+// @version      2.0
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,36 +24,19 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '1.9';
+    const SCRIPT_VERSION = '2.0';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
 
     function hasDV(item) {
-        // Check title text first — most reliable
-        const title = item.querySelector('h5 a')?.textContent || '';
-        if (/\b(dovi|dv|dolby[\.\s]?vision)\b/i.test(title)) return true;
-        // Fallback: DOM indicator elements
-        return !!item.querySelector('.dvbutton, .dv-button, .buttonDV');
+        return !!item.querySelector('.dvbutton');
     }
 
     function hasHDR(item) {
-        // Check title text first — most reliable
-        const title = item.querySelector('h5 a')?.textContent || '';
-        if (/\b(hdr10\+?|hdr|hlg)\b/i.test(title)) return true;
-        // Fallback: DOM indicator elements (note: .buttonhdr is a <style> tag, may behave oddly)
-        return !!item.querySelector('.buttonhdr, .hdr-button, .buttonHDR');
+        // .buttonhdr is a <style> tag — check via getElementsByClassName for reliability
+        return item.getElementsByClassName('buttonhdr').length > 0;
     }
-
-    function getDynamicRange(item) {
-    const hdr = hasHDR(item);
-    const dv  = hasDV(item);
-
-    if (hdr && dv) return 'hdr+dv';
-    if (hdr) return 'hdr';
-    if (dv) return 'dv';
-    return 'sdr';
-}
 
     function getRating(item) {
         const match = item.innerText.match(/Rating\s*:\s*(\d+\.\d+)\/10/i);
@@ -161,38 +144,20 @@
         };
     }
 
-function itemMatchesFilters(item, f) {
-
-    const dr = getDynamicRange(item);
-
-    // Dynamic range filtering
-    if (f.onlySDR && dr !== 'sdr') return false;
-
-    if (f.onlyHDR && f.onlyDV) {
-        // Both selected = only HDR + Dolby Vision releases
-        if (dr !== 'hdr+dv') return false;
+    function itemMatchesFilters(item, f) {
+        if (f.onlySDR && (hasDV(item) || hasHDR(item))) return false;
+        if (f.onlyDV && f.onlyHDR && !(hasDV(item) && hasHDR(item))) return false;
+        if (f.onlyDV && !f.onlyHDR && !(hasDV(item) && !hasHDR(item))) return false;
+        if (f.onlyHDR && !f.onlyDV && !(hasHDR(item) && !hasDV(item))) return false;
+        if (f.res && getResolution(item) !== f.res) return false;
+        if (f.category && getCategory(item) !== f.category) return false;
+        if (getRating(item) < f.minRating) return false;
+        const size = getSize(item);
+        if (size !== null && (size < f.minSize || size > f.maxSize)) return false;
+        if (f.group && getGroup(item).toLowerCase() !== f.group) return false;
+        if (f.search && !item.innerText.toLowerCase().includes(f.search)) return false;
+        return true;
     }
-    else if (f.onlyHDR) {
-        // HDR only
-        if (dr !== 'hdr') return false;
-    }
-    else if (f.onlyDV) {
-        // Dolby Vision only
-        if (dr !== 'dv') return false;
-    }
-
-    if (f.res && getResolution(item) !== f.res) return false;
-    if (f.category && getCategory(item) !== f.category) return false;
-    if (getRating(item) < f.minRating) return false;
-
-    const size = getSize(item);
-    if (size !== null && (size < f.minSize || size > f.maxSize)) return false;
-
-    if (f.group && getGroup(item).toLowerCase() !== f.group) return false;
-    if (f.search && !item.innerText.toLowerCase().includes(f.search)) return false;
-
-    return true;
-}
 
     function applyFilters(container) {
         const f = getFilterValues();
@@ -1060,6 +1025,15 @@ function itemMatchesFilters(item, f) {
     }
 
     function initDetailPage() {
+        const settings = loadDetailSettings();
+
+        // If scroll is off, immediately counter the browser's anchor scroll to #unlocked
+        if ((settings.scrollTarget || 'panel') === 'off') {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+            setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' }), 100);
+            setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' }), 500);
+        }
+
         // Check if links are already visible (no form/button needed)
         const existingBlockquotes = document.querySelectorAll('.content-protector-access-form blockquote');
         if (existingBlockquotes.length) {
@@ -1085,6 +1059,46 @@ function itemMatchesFilters(item, f) {
             // After click, wait for links to appear and inject copy buttons
             waitForLinksAndInject();
         }, 300);
+    }
+
+    function showToast(message) {
+        const existing = document.getElementById('fs-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'fs-toast';
+        toast.textContent = message;
+        Object.assign(toast.style, {
+            position: 'fixed',
+            bottom: '32px',
+            right: '32px',
+            background: '#0d1117',
+            color: '#00e5ff',
+            border: '2px solid rgba(0,229,255,0.6)',
+            borderRadius: '10px',
+            padding: '14px 22px',
+            fontSize: '15px',
+            fontWeight: '600',
+            fontFamily: 'sans-serif',
+            zIndex: '999999',
+            boxShadow: '0 6px 24px rgba(0,229,255,0.15), 0 2px 8px rgba(0,0,0,0.6)',
+            opacity: '0',
+            transform: 'translateY(10px)',
+            transition: 'opacity 0.2s ease, transform 0.2s ease',
+            pointerEvents: 'none',
+            letterSpacing: '0.2px',
+        });
+
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(10px)';
+            setTimeout(() => toast.remove(), 200);
+        }, 2500);
     }
 
     function loadDetailSettings() {
@@ -1160,9 +1174,13 @@ function itemMatchesFilters(item, f) {
                             <input type="radio" name="fs-scroll" value="panel" ${scrollTo === 'panel' ? 'checked' : ''} style="accent-color:#00e5ff;">
                             <span>Our panel (top)</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer; margin-bottom:4px;">
                             <input type="radio" name="fs-scroll" value="links" ${scrollTo === 'links' ? 'checked' : ''} style="accent-color:#00e5ff;">
                             <span>Download links (bottom)</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                            <input type="radio" name="fs-scroll" value="off" ${scrollTo === 'off' ? 'checked' : ''} style="accent-color:#00e5ff;">
+                            <span>Off</span>
                         </label>
                     </div>
                     <div>
@@ -1226,6 +1244,7 @@ function itemMatchesFilters(item, f) {
                     await navigator.clipboard.writeText(btn.dataset.urls);
                     const orig = btn.textContent.trim();
                     btn.textContent = '✓ Copied'; btn.style.color = '#00e5ff';
+                    showToast('✓ All links copied!');
                     setTimeout(() => { btn.textContent = orig; btn.style.color = '#8b949e'; }, 1500);
                 });
             });
@@ -1233,6 +1252,7 @@ function itemMatchesFilters(item, f) {
                 btn.addEventListener('click', async () => {
                     await navigator.clipboard.writeText(btn.dataset.url);
                     btn.textContent = '✓'; btn.style.color = '#00e5ff';
+                    showToast('✓ Link copied!');
                     setTimeout(() => { btn.textContent = '📋'; btn.style.color = '#8b949e'; }, 1500);
                 });
             });
@@ -1261,13 +1281,21 @@ function itemMatchesFilters(item, f) {
             // Scroll behavior
             if (scrollTo === 'panel') {
                 panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } else {
+            } else if (scrollTo === 'links') {
                 document.querySelector('#unlocked')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                // Off: the site may scroll to #unlocked anchor automatically — counteract it
+                window.scrollTo({ top: 0, behavior: 'instant' });
+                // Also intercept any delayed anchor scroll
+                setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' }), 50);
+                setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' }), 200);
             }
 
             // Auto-copy
             if (autoCopy && grouped[autoCopy]) {
-                navigator.clipboard.writeText(grouped[autoCopy].urls.join('\n')).catch(() => {});
+                navigator.clipboard.writeText(grouped[autoCopy].urls.join('\n'))
+                    .then(() => showToast(`✓ ${autoCopy} links copied!`))
+                    .catch(() => {});
             }
 
             // ── Copy buttons in original section ─────────────────────────────
@@ -1291,6 +1319,7 @@ function itemMatchesFilters(item, f) {
                         copyAllBtn.addEventListener('click', async () => {
                             await navigator.clipboard.writeText(allUrls);
                             copyAllBtn.textContent = '✓ Copied'; copyAllBtn.style.color = '#00e5ff'; copyAllBtn.style.borderColor = '#00e5ff';
+                            showToast('✓ All links copied!');
                             setTimeout(() => { copyAllBtn.textContent = '📋 Copy all'; copyAllBtn.style.color = '#e6edf3'; copyAllBtn.style.borderColor = '#444c56'; }, 1500);
                         });
                         img.after(copyAllBtn);
@@ -1314,6 +1343,7 @@ function itemMatchesFilters(item, f) {
                     copyBtn.addEventListener('click', async () => {
                         await navigator.clipboard.writeText(a.href);
                         copyBtn.textContent = '✓ Copied'; copyBtn.style.color = '#00e5ff'; copyBtn.style.borderColor = '#00e5ff';
+                        showToast('✓ Link copied!');
                         setTimeout(() => { copyBtn.textContent = '📋 Copy'; copyBtn.style.color = '#e6edf3'; copyBtn.style.borderColor = '#444c56'; }, 1500);
                     });
                     row.appendChild(copyBtn);
