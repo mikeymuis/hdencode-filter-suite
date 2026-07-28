@@ -118,7 +118,33 @@ The filter bar appears at the top of the release grid on any HDEncode page.
 | ↓ Load pages | Fetch additional pages into the current view with a live progress bar |
 | ✕ Clear | Reset all filters and restore the full list |
 
-### Tips
+### Detail page
+
+When you click "🔗 Links" on any release, the detail page opens in a new tab. The script automatically clicks "View links" once the security check completes — no manual interaction needed.
+
+Once the links are available, two things happen:
+
+**⚡ Download Links panel**
+A links panel is injected at the top of the page, above the poster and description. It shows all download links grouped by hoster, each with a colored dot indicator. From here you can:
+- Click any link to open it directly
+- Click "📋" next to a link to copy it to your clipboard
+- Click "📋 Copy all" next to a hoster name to copy all parts at once
+- A toast notification confirms every copy action in the bottom-right corner
+
+**Copy buttons in the original section**
+Copy buttons are also injected next to every link in the original download section further down the page, so you can copy from there too without scrolling back up.
+
+**⚙️ Settings**
+The Settings button in the links panel opens a small options panel with two settings, both saved between visits:
+
+| Setting | Options |
+|---|---|
+| Scroll to | Our panel (top) — scrolls to the links panel at the top of the page |
+| | Download links (bottom) — scrolls to the original download section |
+| | Off — page stays at the top, no automatic scrolling |
+| Auto-copy on load | Off, or choose a hoster (e.g. Rapidgator) to automatically copy all links from that hoster when the page loads |
+
+---
 
 - Active filters are highlighted with a cyan border so you always know what's active
 - The release group dropdown only shows groups that match your other active filters
