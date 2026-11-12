@@ -1,6 +1,6 @@
 # HDEncode Filter Suite
 
-![Version](https://img.shields.io/badge/version-2.0-00e5ff?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.1-00e5ff?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-required-orange?style=flat-square)
 ![Domains](https://img.shields.io/badge/works%20on-hdencode.org%20%7C%20.com%20%7C%20.ro-blue?style=flat-square)
@@ -18,9 +18,10 @@ HDEncode is a great source for releases of all kinds, movies, TV shows, TV packs
 - SDR: filter to releases without any HDR format — enabling SDR automatically disables the DV and HDR filters
 - Resolution: filter by 2160p, 1080p or 720p
 - Content type: separate Movies, TV Shows and TV Packs
-- Minimum IMDb rating
+- Minimum IMDb rating: hide releases below a set rating, read directly from the release description
 - File size: set a minimum and/or maximum in GB
 - Release group: dynamic dropdown populated from the current results, updates as you filter
+- Release year: dynamic dropdown with all years present in the current results, sorted newest first
 
 **Search & navigation**
 - Free-text search across all visible release info
@@ -108,12 +109,13 @@ The filter bar appears at the top of the release grid on any HDEncode page.
 | Min GB / Max GB | Filter by file size |
 | All / Movies / TV Shows / TV Packs | Filter by content type |
 
-### Row 2: Search, groups & loading
+### Row 2: Search, groups, year & loading
 
 | Control | Description |
 |---|---|
 | All groups | Filter by release group, populated dynamically from current results |
 | Search anything | Free-text search across all release info |
+| All years | Filter by release year — populated dynamically from current results, sorted newest first |
 | All pages | Choose how many additional pages to load — can optionally be saved via ⚙️ settings |
 | ↓ Load pages | Fetch additional pages into the current view with a live progress bar |
 | ✕ Clear | Reset all filters and restore the full list |
@@ -196,6 +198,11 @@ This project takes time to maintain and keep up to date. If it saves you time an
 ---
 
 ## Changelog
+
+### v2.1
+- Fixed IMDb rating filter — HDEncode moved the rating from a dedicated element to the release description text; it is now read from there using a `★ X.X/10` pattern
+- Added release year filter — a dynamic dropdown in Row 2 (after Search) shows all years present in the current results, sorted newest first. Updates automatically when more pages are loaded
+- Year filter is saved between visits via the ⚙️ persistence settings
 
 ### v2.0
 - Added "Off" option to the scroll setting in ⚙️ Settings — page stays at the top after links load, including suppressing HDEncode's own anchor scroll to `#unlocked`

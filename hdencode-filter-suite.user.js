@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDEncode Filter Suite
 // @namespace    https://hdencode.org/
-// @version      2.0
+// @version      2.1
 // @description  A Tampermonkey userscript that adds powerful filtering, searching and multi-page loading to HDEncode.org
 // @author       mikeymuis
 // @homepage     https://github.com/mikeymuis/hdencode-filter-suite
@@ -24,7 +24,7 @@
     // ─── Script constants ─────────────────────────────────────────────────────
 
     const SCRIPT_NAME    = 'HDEncode Filter Suite';
-    const SCRIPT_VERSION = '2.0';
+    const SCRIPT_VERSION = '2.1';
     const SCRIPT_ID      = 'hdencode-filter-suite';
 
     // ─── Helpers: item data extraction ───────────────────────────────────────
@@ -39,8 +39,18 @@
     }
 
     function getRating(item) {
-        const match = item.innerText.match(/Rating\s*:\s*(\d+\.\d+)\/10/i);
+        const contenido = item.querySelector('.contenido')?.textContent || '';
+        const match = contenido.match(/★\s*(\d+(?:\.\d+)?)\s*\/\s*10/);
         return match ? parseFloat(match[1]) : 0;
+    }
+
+    function getYear(item) {
+        for (const a of item.querySelectorAll('.calidad3 a')) {
+            const href = a.getAttribute('href') || '';
+            const m = href.match(/release-year\/(\d{4})\//);
+            if (m) return m[1];
+        }
+        return '';
     }
 
     function getSize(item) {
@@ -127,6 +137,34 @@
         }
     }
 
+    function buildYearDropdown(container) {
+        const select = document.getElementById('f-year');
+        if (!select) return;
+
+        const current = select.value;
+        const years = new Set();
+
+        for (const item of container.querySelectorAll('.fit.item')) {
+            const y = getYear(item);
+            if (y) years.add(y);
+        }
+
+        // Keep only the first default option
+        select.innerHTML = '<option value="">All years</option>';
+
+        // Sort descending — most recent first
+        for (const year of [...years].sort((a, b) => b - a)) {
+            const opt = document.createElement('option');
+            opt.value = year;
+            opt.textContent = year;
+            select.appendChild(opt);
+        }
+
+        if (current && Array.from(select.options).some(o => o.value === current)) {
+            select.value = current;
+        }
+    }
+
     // ─── Filter logic ─────────────────────────────────────────────────────────
 
     function getFilterValues() {
@@ -141,6 +179,7 @@
             maxSize:   parseFloat(document.getElementById('f-maxsize')?.value) || Infinity,
             group:     (document.getElementById('f-group')?.value || '').toLowerCase().trim(),
             search:    (document.getElementById('f-search')?.value || '').toLowerCase().trim(),
+            year:      document.getElementById('f-year')?.value || '',
         };
     }
 
@@ -156,6 +195,7 @@
         if (size !== null && (size < f.minSize || size > f.maxSize)) return false;
         if (f.group && getGroup(item).toLowerCase() !== f.group) return false;
         if (f.search && !item.innerText.toLowerCase().includes(f.search)) return false;
+        if (f.year && getYear(item) !== f.year) return false;
         return true;
     }
 
@@ -224,6 +264,7 @@
         'f-maxsize':   'Max file size',
         'f-group':     'Release group',
         'f-search':    'Search text',
+        'f-year':      'Year',
         'f-pagelimit': 'Page limit',
     };
 
@@ -717,6 +758,9 @@
                     </select>
                     <input type="text" id="f-search" placeholder="Search anything..."
                         style="${INPUT_STYLE} width:180px;">
+                    <select id="f-year" style="${INPUT_STYLE} width:100px;">
+                        <option value="">All years</option>
+                    </select>
                 </div>
 
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -980,6 +1024,7 @@
             try {
                 await loadAllPages(container, status);
                 buildGroupDropdown(container);
+                buildYearDropdown(container);
                 applyFilters(container);
             } catch (e) {
                 console.error(`${SCRIPT_NAME}: load pages error`, e);
@@ -1002,6 +1047,7 @@
         }
 
         buildGroupDropdown(container);
+        buildYearDropdown(container);
         loadFilters();
         syncDynamicRangeState();
         applyFilters(container);
